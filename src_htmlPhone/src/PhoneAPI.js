@@ -1,5 +1,9 @@
 import store from '@/store'
 import VoiceRTC from './VoiceRCT'
+import Vue from 'vue'
+
+import emoji from './emoji.json'
+const keyEmoji = Object.keys(emoji)
 
 let USE_VOICE_RTC = false
 const BASE_URL = 'http://gcphone/'
@@ -31,6 +35,13 @@ class PhoneAPI {
     } else {
       return console.log(...data)
     }
+  }
+
+  convertEmoji (text) {
+    for (const e of keyEmoji) {
+      text = text.replace(new RegExp(`:${e}:`, 'g'), emoji[e])
+    }
+    return text
   }
 
   // === Gestion des messages
@@ -73,6 +84,9 @@ class PhoneAPI {
   async closePhone () {
     return this.post('closePhone')
   }
+  async setUseMouse (useMouse) {
+    return this.post('useMouse', useMouse)
+  }
   async setGPS (x, y) {
     return this.post('setGPS', {x, y})
   }
@@ -91,21 +105,13 @@ class PhoneAPI {
   }
   async deleteALL () {
     localStorage.clear()
-    console.log('tchatReset')
     store.dispatch('tchatReset')
-    console.log('resetPhone')
     store.dispatch('resetPhone')
-    console.log('resetMessage')
     store.dispatch('resetMessage')
-    console.log('resetContact')
     store.dispatch('resetContact')
-    console.log('resetBourse')
     store.dispatch('resetBourse')
-    console.log('resetAppels')
     store.dispatch('resetAppels')
-    console.log('event: deleteALL')
     return this.post('deleteALL')
-    // store.dispatch('resetbank') //
   }
   async getConfig () {
     if (this.config === null) {
@@ -125,8 +131,12 @@ class PhoneAPI {
     return this.config
   }
 
-  onsetEnableApp (data) {
+  async onsetEnableApp (data) {
     store.dispatch('setEnableApp', data)
+  }
+
+  async setIgnoreFocus (ignoreFocus) {
+    this.post('setIgnoreFocus', { ignoreFocus })
   }
 
   // === App Tchat
@@ -191,9 +201,6 @@ class PhoneAPI {
       ...data.infoCall,
       initiator: data.initiator
     })
-    // this.voiceRTC.addEventListener('onCandidate', (candidates) => {
-    //   this.post('onCandidates', { id: data.infoCall.id, candidates })
-    // })
   }
   onacceptCall (data) {
     if (USE_VOICE_RTC === true) {
@@ -230,6 +237,68 @@ class PhoneAPI {
   onautoAcceptCall (data) {
     store.commit('SET_APPELS_INFO', data.infoCall)
     this.acceptCall(data.infoCall)
+  }
+
+  // === Twitter
+  twitter_login (username, password) {
+    this.post('twitter_login', {username, password})
+  }
+  twitter_changePassword (username, password, newPassword) {
+    this.post('twitter_changePassword', {username, password, newPassword})
+  }
+  twitter_createAccount (username, password, avatarUrl) {
+    this.post('twitter_createAccount', {username, password, avatarUrl})
+  }
+  twitter_postTweet (username, password, message) {
+    this.post('twitter_postTweet', { username, password, message })
+  }
+  twitter_postTweetImg (username, password, img) {
+    this.post('twitter_postTweetImg', { username, password, img })
+  }
+  twitter_toggleLikeTweet (username, password, tweetId) {
+    this.post('twitter_toggleLikeTweet', { username, password, tweetId })
+  }
+  twitter_setAvatar (username, password, avatarUrl) {
+    this.post('twitter_setAvatarUrl', { username, password, avatarUrl })
+  }
+  twitter_getTweets (username, password) {
+    this.post('twitter_getTweets', { username, password })
+  }
+  twitter_getFavoriteTweets (username, password) {
+    this.post('twitter_getFavoriteTweets', { username, password })
+  }
+  ontwitter_tweets (data) {
+    store.commit('SET_TWEETS', data)
+  }
+  ontwitter_favoritetweets (data) {
+    store.commit('SET_FAVORITE_TWEETS', data)
+  }
+  ontwitter_newTweet (data) {
+    store.dispatch('addTweet', data.tweet)
+  }
+  ontwitter_setAccount (data) {
+    store.dispatch('setAccount', data)
+  }
+  ontwitter_updateTweetLikes (data) {
+    store.commit('UPDATE_TWEET_LIKE', data)
+  }
+  ontwitter_setTweetLikes (data) {
+    store.commit('UPDATE_TWEET_ISLIKE', data)
+  }
+  ontwitter_showError (data) {
+    Vue.notify({
+      title: store.getters.IntlString(data.title, ''),
+      message: store.getters.IntlString(data.message),
+      icon: 'twitter',
+      backgroundColor: '#e0245e80'
+    })
+  }
+  ontwitter_showSuccess (data) {
+    Vue.notify({
+      title: store.getters.IntlString(data.title, ''),
+      message: store.getters.IntlString(data.message),
+      icon: 'twitter'
+    })
   }
 
 }

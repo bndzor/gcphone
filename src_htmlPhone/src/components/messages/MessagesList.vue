@@ -1,6 +1,6 @@
 <template>
   <div class="screen">
-    <list :list='messagesData' :disable="disableList" title="Messages" @select="onSelect" @option='onOption'></list>
+    <list :list='messagesData' :disable="disableList" :title="IntlString('APP_MESSAGE_TITLE')" @back="back" @select="onSelect" @option='onOption'></list>
   </div>
 </template>
 
@@ -16,7 +16,6 @@ export default {
   },
   data () {
     return {
-      nouveauMessage: {backgroundColor: '#C0C0C0', display: 'Nouveau message', letter: '+', id: -1},
       disableList: false
     }
   },
@@ -34,9 +33,9 @@ export default {
       this.disableList = true
       Modal.CreateModal({
         choix: [
-          {id: 1, title: 'Effacer la conversation', icons: 'fa-circle-o', color: 'orange'},
-          {id: 2, title: 'Effacer toutes conv.', icons: 'fa-circle-o', color: 'red'},
-          {id: 3, title: 'Annuler', icons: 'fa-undo'}
+          {id: 1, title: this.IntlString('APP_MESSAGE_ERASE_CONVERSATION'), icons: 'fa-circle-o', color: 'orange'},
+          {id: 2, title: this.IntlString('APP_MESSAGE_ERASE_ALL_CONVERSATIONS'), icons: 'fa-circle-o', color: 'red'},
+          {id: 3, title: this.IntlString('CANCEL'), icons: 'fa-undo'}
         ]
       }).then(rep => {
         if (rep.id === 1) {
@@ -53,15 +52,27 @@ export default {
     }
   },
   computed: {
-    ...mapGetters(['contacts', 'messages']),
+    ...mapGetters(['IntlString', 'useMouse', 'contacts', 'messages']),
     messagesData: function () {
       let messages = this.messages
       let contacts = this.contacts
       let messGroup = messages.reduce((rv, x) => {
         if (rv[x['transmitter']] === undefined) {
+          const data = {
+            noRead: 0,
+            lastMessage: 0,
+            display: x.transmitter
+          }
           let contact = contacts.find(e => e.number === x.transmitter)
-          let display = contact !== undefined ? contact.display : x.transmitter
-          rv[x['transmitter']] = {noRead: 0, display, lastMessage: 0}
+          if (contact !== undefined) {
+            data.display = contact.display
+            data.backgroundColor = contact.backgroundColor || generateColorForStr(x.transmitter)
+            data.letter = contact.letter
+            data.icon = contact.icon
+          } else {
+            data.backgroundColor = generateColorForStr(x.transmitter)
+          }
+          rv[x['transmitter']] = data
         }
         if (x.isRead === 0) {
           rv[x['transmitter']].noRead += 1
@@ -80,17 +91,27 @@ export default {
           number: key,
           lastMessage: messGroup[key].lastMessage,
           keyDesc: messGroup[key].keyDesc,
-          backgroundColor: generateColorForStr(key)
+          backgroundColor: messGroup[key].backgroundColor,
+          icon: messGroup[key].icon,
+          letter: messGroup[key].letter
         })
       })
       mess.sort((a, b) => b.lastMessage - a.lastMessage)
-      return [this.nouveauMessage, ...mess]
+      return [this.newMessageOption, ...mess]
+    },
+    newMessageOption () {
+      return {
+        backgroundColor: '#C0C0C0',
+        display: this.IntlString('APP_MESSAGE_NEW_MESSAGE'),
+        letter: '+',
+        id: -1
+      }
     }
   },
-  created: function () {
+  created () {
     this.$bus.$on('keyUpBackspace', this.back)
   },
-  beforeDestroy: function () {
+  beforeDestroy () {
     this.$bus.$off('keyUpBackspace', this.back)
   }
 }

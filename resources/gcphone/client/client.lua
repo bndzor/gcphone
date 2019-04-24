@@ -19,10 +19,88 @@ local messages = {}
 local myPhoneNumber = ''
 local isDead = false
 local USE_RTC = false
+local useMouse = false
+local ignoreFocus = false
+local lastFrameIsOpen = false
 
 local PhoneInCall = {}
 local currentPlaySound = false
 local soundId = 1485
+
+
+--====================================================================================
+--  Check si le joueurs poséde un téléphone
+--  Callback true or false
+--====================================================================================
+function hasPhone (cb)
+  cb(true)
+end
+--====================================================================================
+--  Que faire si le joueurs veut ouvrir sont téléphone n'est qu'il en a pas ?
+--====================================================================================
+function ShowNoPhoneWarning ()
+end
+
+--[[
+  Ouverture du téphone lié a un item
+  Un solution ESC basé sur la solution donnée par HalCroves
+  https://forum.fivem.net/t/tutorial-for-gcphone-with-call-and-job-message-other/177904
+--]]
+--[[
+ESX = nil
+Citizen.CreateThread(function()
+	while ESX == nil do
+		TriggerEvent('esx:getSharedObject', function(obj) ESX = obj end)
+		Citizen.Wait(0)
+  end
+end)
+
+function hasPhone (cb)
+  if (ESX == nil) then return cb(0) end
+  ESX.TriggerServerCallback('gcphone:getItemAmount', function(qtty)
+    cb(qtty > 0)
+  end, 'phone')
+end
+function ShowNoPhoneWarning () 
+  if (ESX == nil) then return end
+  ESX.ShowNotification("Vous n'avez pas de ~r~téléphone~s~")
+end
+--]]
+
+
+--====================================================================================
+--  
+--====================================================================================
+Citizen.CreateThread(function()
+  while true do
+    Citizen.Wait(0)
+    if IsControlJustPressed(1, KeyOpenClose) then
+      hasPhone(function (hasPhone)
+        if hasPhone == true then
+          TooglePhone()
+        else
+          ShowNoPhoneWarning()
+        end
+      end)
+      
+    end
+    if menuIsOpen == true then
+      for _, value in ipairs(KeyToucheCloseEvent) do
+        if IsControlJustPressed(1, value.code) then
+          SendNUIMessage({keyUp = value.event})
+        end
+      end
+	  local nuiFocus = useMouse and not ignoreFocus
+	  SetNuiFocus(nuiFocus, nuiFocus)
+	  lastFrameIsOpen = true
+	else
+	  if lastFrameIsOpen == true then
+	    SetNuiFocus(false, false)
+	    lastFrameIsOpen = false
+	  end
+    end
+  end
+end)
 
 
 
@@ -33,10 +111,6 @@ RegisterNetEvent('gcPhone:setEnableApp')
 AddEventHandler('gcPhone:setEnableApp', function(appName, enable)
   SendNUIMessage({event = 'setEnableApp', appName = appName, enable = enable })
 end)
-
-
-
-
 
 --====================================================================================
 --  Gestion des appels fixe
@@ -119,11 +193,11 @@ Citizen.CreateThread(function ()
     if inRangeToActivePhone == false then
       showFixePhoneHelper(coords)
     end
-    if inRangeToActivePhone == true and currentPlaySound == true then
+    if inRangeToActivePhone == true and currentPlaySound == false then
       PlaySound(soundId, "Remote_Ring", "Phone_SoundSet_Michael", 0, 0, 1)
-      currentPlaySound = false
-    elseif inRangeToActivePhone == false and currentPlaySound == true then
       currentPlaySound = true
+    elseif inRangeToActivePhone == false and currentPlaySound == true then
+      currentPlaySound = false
       StopSound(soundId)
     end
     Citizen.Wait(0)
@@ -142,25 +216,6 @@ end)
 
 
 
---====================================================================================
---  
---====================================================================================
-Citizen.CreateThread(function()
-  
-  while true do
-    Citizen.Wait(0)
-    if IsControlJustPressed(1, KeyOpenClose) then
-      TooglePhone()
-    end
-    if menuIsOpen == true then
-      for _, value in ipairs(KeyToucheCloseEvent) do
-        if IsControlJustPressed(1, value.code) then
-          SendNUIMessage({keyUp = value.event})
-        end
-      end
-    end
-  end
-end)
 
 RegisterNetEvent("gcPhone:forceOpenPhone")
 AddEventHandler("gcPhone:forceOpenPhone", function(_myPhoneNumber)
@@ -199,6 +254,7 @@ RegisterNetEvent("gcPhone:receiveMessage")
 AddEventHandler("gcPhone:receiveMessage", function(message)
   -- SendNUIMessage({event = 'updateMessages', messages = messages})
   SendNUIMessage({event = 'newMessage', message = message})
+  table.insert(messages, message)
   if message.owner == 0 then
     local text = '~o~Nouveau message'
     if ShowNumberNotification == true then
@@ -279,13 +335,12 @@ end
 --====================================================================================
 --  Function client | Appels
 --====================================================================================
-local inCall = false
 local aminCall = false
+local inCall = false
 
 RegisterNetEvent("gcPhone:waitingCall")
 AddEventHandler("gcPhone:waitingCall", function(infoCall, initiator)
   SendNUIMessage({event = 'waitingCall', infoCall = infoCall, initiator = initiator})
-  print('---------------------', initiator)
   if initiator == true then
     PhonePlayCall()
     if menuIsOpen == false then
@@ -326,6 +381,14 @@ AddEventHandler("gcPhone:historiqueCall", function(historique)
 end)
 
 
+function startCall (phone_number, rtcOffer, extraData)
+  TriggerServerEvent('gcPhone:startCall', phone_number, rtcOffer, extraData)
+end
+
+function acceptCall (infoCall, rtcAnswer)
+  TriggerServerEvent('gcPhone:acceptCall', infoCall, rtcAnswer)
+end
+
 function rejectCall(infoCall)
   TriggerServerEvent('gcPhone:rejectCall', infoCall)
 end
@@ -350,18 +413,12 @@ end
 --====================================================================================
 --  Event NUI - Appels
 --====================================================================================
-function startCall (phone_number, rtcOffer, extraData)
-  TriggerServerEvent('gcPhone:startCall', phone_number, rtcOffer, extraData)
-end
+
 RegisterNUICallback('startCall', function (data, cb)
-  print(json.encode(data))
   startCall(data.numero, data.rtcOffer, data.extraData)
   cb()
 end)
 
-function acceptCall (infoCall, rtcAnswer)
-  TriggerServerEvent('gcPhone:acceptCall', infoCall, rtcAnswer)
-end
 RegisterNUICallback('acceptCall', function (data, cb)
   acceptCall(data.infoCall, data.rtcAnswer)
   cb()
@@ -403,7 +460,6 @@ end)
 RegisterNetEvent('gcphone:autoCall')
 AddEventHandler('gcphone:autoCall', function(number, extraData)
   if number ~= nil then
-    print('number', number)
     SendNUIMessage({ event = "autoStartCall", number = number, extraData = extraData})
   end
 end)
@@ -553,13 +609,23 @@ RegisterNUICallback('setGPS', function(data, cb)
   SetNewWaypoint(tonumber(data.x), tonumber(data.y))
   cb()
 end)
+
+-- Add security for event (leuit#0100)
 RegisterNUICallback('callEvent', function(data, cb)
-  if data.data ~= nil then 
-    TriggerEvent(data.eventName, data.data)
+  local eventName = data.eventName or ''
+  if string.match(eventName, 'gcphone') then
+    if data.data ~= nil then 
+      TriggerEvent(data.eventName, data.data)
+    else
+      TriggerEvent(data.eventName)
+    end
   else
-    TriggerEvent(data.eventName)
+    print('Event not allowed')
   end
   cb()
+end)
+RegisterNUICallback('useMouse', function(um, cb)
+  useMouse = um
 end)
 RegisterNUICallback('deleteALL', function(data, cb)
   TriggerServerEvent('gcPhone:deleteALL')
@@ -618,3 +684,7 @@ AddEventHandler('onClientResourceStart', function(res)
 end)
 
 
+RegisterNUICallback('setIgnoreFocus', function (data, cb)
+  ignoreFocus = data.ignoreFocus
+  cb()
+end)

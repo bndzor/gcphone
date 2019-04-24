@@ -18,6 +18,31 @@ end
 --     return '0' .. math.random(600000000,699999999)
 -- end
 
+
+--[[
+  Ouverture du téphone lié a un item
+  Un solution ESC basé sur la solution donnée par HalCroves
+  https://forum.fivem.net/t/tutorial-for-gcphone-with-call-and-job-message-other/177904
+--]]
+--[[
+local ESX = nil
+TriggerEvent('esx:getSharedObject', function(obj) 
+    ESX = obj 
+    ESX.RegisterServerCallback('gcphone:getItemAmount', function(source, cb, item)
+        print('gcphone:getItemAmount call item : ' .. item)
+        local xPlayer = ESX.GetPlayerFromId(source)
+        local items = xPlayer.getInventoryItem(item)
+        if items == nil then
+            cb(0)
+        else
+            cb(items.count)
+        end
+    end)
+end)
+--]]
+
+
+
 --====================================================================================
 --  Utils
 --====================================================================================
@@ -172,7 +197,7 @@ end)
 
 function _internalAddMessage(transmitter, receiver, message, owner)
     local Query = "INSERT INTO phone_messages (`transmitter`, `receiver`,`message`, `isRead`,`owner`) VALUES(@transmitter, @receiver, @message, @isRead, @owner);"
-    local Query2 = 'SELECT * from phone_messages WHERE `id` = (SELECT LAST_INSERT_ID());'
+    local Query2 = 'SELECT * from phone_messages WHERE `id` = @id;'
 	local Parameters = {
         ['@transmitter'] = transmitter,
         ['@receiver'] = receiver,
@@ -180,7 +205,10 @@ function _internalAddMessage(transmitter, receiver, message, owner)
         ['@isRead'] = owner,
         ['@owner'] = owner
     }
-	return MySQL.Sync.fetchAll(Query .. Query2, Parameters)[1]
+    local id = MySQL.Sync.insert(Query, Parameters)
+    return MySQL.Sync.fetchAll(Query2, {
+        ['@id'] = id
+    })[1]
 end
 
 function addMessage(source, identifier, phone_number, message)

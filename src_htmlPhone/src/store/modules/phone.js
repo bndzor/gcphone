@@ -8,14 +8,19 @@ const state = {
   coque: JSON.parse(window.localStorage['gc_coque'] || null),
   zoom: window.localStorage['gc_zoom'] || '100%',
   volume: parseFloat(window.localStorage['gc_volume']) || 1,
+  mouse: window.localStorage['gc_mouse'] === 'true',
+  lang: window.localStorage['gc_language'] || 'fr_FR',
   config: {
     reseau: 'Gannon',
     useFormatNumberFrance: false,
     apps: [],
     themeColor: '#2A56C6',
-    colors: ['#2A56C6']
+    colors: ['#2A56C6'],
+    language: {}
   }
 }
+
+PhoneAPI.setUseMouse(state.mouse)
 
 const getters = {
   show: ({ show }) => show,
@@ -54,26 +59,56 @@ const getters = {
   },
   coqueLabel: (state, getters) => getters.coque.label,
   zoom: ({ zoom }) => zoom,
+  useMouse: ({ mouse }) => mouse,
   config: ({ config }) => config,
   warningMessageCount: ({ config }) => config.warningMessageCount || 250,
   useFormatNumberFrance: ({ config }) => config.useFormatNumberFrance,
   themeColor: ({ config }) => config.themeColor,
   colors: ({ config }) => config.colors,
-  Apps: ({ config }, getters) => config.apps
+  Apps: ({ config, lang }, getters) => config.apps
     .filter(app => app.enabled !== false)
     .map(app => {
       if (app.puceRef !== undefined) {
         app.puce = getters[app.puceRef]
       }
+      const keyName = `${lang}__name`
+      app.intlName = app[keyName] || app.name
       return app
     }),
-  AppsHome: (state, getters) => getters.Apps.filter(app => app.inHomePage === true)
+  AppsHome: (state, getters) => getters.Apps.filter(app => app.inHomePage === true),
+  availableLanguages ({ config }) {
+    const langKey = Object.keys(config.language)
+    const AvailableLanguage = {}
+    for (const key of langKey) {
+      AvailableLanguage[config.language[key].NAME] = key
+    }
+    return AvailableLanguage
+  },
+  IntlString ({ config, lang }) {
+    if (config.language[lang] === undefined) {
+      return (LABEL) => LABEL
+    }
+    return (LABEL, defaultValue) => {
+      return config.language[lang][LABEL] || defaultValue || LABEL
+    }
+  }
 
 }
 
 const actions = {
-  async loadConfig ({ commit }) {
+  async loadConfig ({ commit, state }) {
     const config = await PhoneAPI.getConfig()
+    const keyLang = Object.keys(config.language)
+    for (const key of keyLang) {
+      const timeAgoConf = config.language[key].TIMEAGO
+      if (timeAgoConf !== undefined) {
+        Vue.prototype.$timeago.addLocale(key, timeAgoConf)
+      }
+    }
+    Vue.prototype.$timeago.setCurrentLocale(state.lang)
+    if (config.defaultContacts !== undefined) {
+      commit('SET_DEFAULT_CONTACTS', config.defaultContacts)
+    }
     commit('SET_CONFIG', config)
   },
   setEnableApp ({ commit, state }, { appName, enable = true }) {
@@ -98,6 +133,16 @@ const actions = {
     window.localStorage['gc_volume'] = volume
     commit('SET_VOLUME', volume)
   },
+  setLanguage ({ commit }, lang) {
+    window.localStorage['gc_language'] = lang
+    Vue.prototype.$timeago.setCurrentLocale(lang)
+    commit('SET_LANGUAGE', lang)
+  },
+  setMouseSupport ({ commit }, value) {
+    window.localStorage['gc_mouse'] = value
+    PhoneAPI.setUseMouse(value)
+    commit('SET_MOUSE_SUPPORT', value)
+  },
   closePhone () {
     PhoneAPI.closePhone()
   },
@@ -106,6 +151,7 @@ const actions = {
     dispatch('setVolume', 1)
     dispatch('setBackground', getters.config.background_default)
     dispatch('setCoque', getters.config.coque_default)
+    dispatch('setLanguage', 'fr_FR')
   }
 }
 
@@ -136,6 +182,12 @@ const mutations = {
   },
   SET_VOLUME (state, volume) {
     state.volume = volume
+  },
+  SET_LANGUAGE (state, lang) {
+    state.lang = lang
+  },
+  SET_MOUSE_SUPPORT (state, value) {
+    state.mouse = value
   }
 }
 
